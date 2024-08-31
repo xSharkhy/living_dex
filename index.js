@@ -11,7 +11,8 @@ const SELECTORS = {
     ARTICLE_LINK_SELECTOR: 'article#Pokémon_Platino-0 tbody tr td:nth-child(4) a',
     POKEMON_NAME: 'h1 > span > span',
     POKEMON_SINNOH_NUMBER: '#numerosinnoh',
-    POKEMON_PLATINUM_LOCALISATION: 'td[style="background-color:#B5B5B5"] > ul > li'
+    POKEMON_PLATINUM_LOCALISATION: 'td[style="background-color:#B5B5B5"] > ul > li',
+    OPTIONAL_LOCALISATION_DL: 'td[style="background-color:#B5B5B5"] > dl > dd'
   }
 }
 
@@ -40,8 +41,15 @@ async function extractPokemonData (page, link) {
     return el.textContent.trim()
   })
 
-  const obtain = await page.$$eval(SELECTORS.CSS.POKEMON_PLATINUM_LOCALISATION,
+  let obtain = await page.$$eval(SELECTORS.CSS.POKEMON_PLATINUM_LOCALISATION,
     list => list.map(item => item.textContent.trim()).join('\n'))
+
+  const existsOptional = await page.$(SELECTORS.CSS.OPTIONAL_LOCALISATION_DL)
+  if (existsOptional) {
+    const optional = await page.$$eval(SELECTORS.CSS.OPTIONAL_LOCALISATION_DL,
+      list => list.map(item => item.textContent.trim()).join('\n'))
+    obtain += '\n' + optional
+  }
 
   console.log(`Data obtained for ${name}!`)
   return { name, number, link, obtain }
@@ -72,11 +80,16 @@ function transformPokemonData (pokemonInfo) {
 
 // Check if a Pokémon is capturable
 function isCapturable (methods) {
-  if (methods.length > 2) return true
+  if (methods.length > 3) return true
   const lowerCaseMethods = methods.map(method => method.toLowerCase())
-  const containsEvolve = lowerCaseMethods.some(method => method.includes('evolucionar'))
-  const containsTrade = lowerCaseMethods.some(method => method.includes('intercambiar'))
-  return !(methods.length === 2 ? containsEvolve && containsTrade : containsEvolve || containsTrade)
+  const check = lowerCaseMethods.map(method => {
+    if (method.includes('evolucionar') || method.includes('intercambiar') || method.includes('parque compi')) {
+      return false
+    }
+    return true
+  })
+
+  return !check.every(value => !value)
 }
 
 // Parse a single obtain method
@@ -231,7 +244,7 @@ async function runScraper () {
     data.forEach(transformPokemonData)
     updatePokemonNeededCounts(data)
 
-    await fsp.writeFile('./data.json', JSON.stringify(data, null, 2))
+    await fsp.writeFile('./data/data.json', JSON.stringify(data, null, 2))
     console.log('Data saved successfully!')
   } catch (error) {
     console.error('An error occurred:', error)
